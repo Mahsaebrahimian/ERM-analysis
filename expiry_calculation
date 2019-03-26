@@ -1,0 +1,80 @@
+select 
+distinct  --OFFER_ID,da_id,OFFER_DESC_V,VALIDITY_V,Bolton_Type,OFFER_VALIDITY_DESCRIPTION
+date_key,sum(data_usage) as data_usage_GB,Bolton_Type,
+case when bolton_type<>'OTHER' then OFFER_VALIDITY_DESCRIPTION else '' end as OFFER_VALIDITY_DESCRIPTION
+from 
+(
+    select date_key,sum(nvl(case when unittype='Monetary' then DA_OFFER_CHANGE/rate/1024/1024 when unittype='Volume' then DA_OFFER_CHANGE/1024/1024/1024 end,0))data_usage,
+    OFFER_ID,a.da_id,OFFER_DESC_V,VALIDITY_V,
+    case
+    when a.offer_id between 52370 and 52687 or a.offer_id between 57149 and 57315 or  offer_desc_v like '%TD%'-- TD-LTE
+    or a.da_id in (67,1006,58,1007,1203) --LTE and Roaming , PCRF , MVNO
+    or a.offer_id between 33010 and 33017 or a.offer_id between 35010 and 35017 --4khoone offers
+    or a.offer_id between 87064 and 87088 -- snapi offers
+    OR UPPER(offer_desc_v) like '%CORPORATE%'
+    OR upper(offer_desc_v)  like '%ENTERPRISE%' OR upper(offer_desc_v)  like '%IMAMREZA%' OR upper(offer_desc_v)  like '%WOW%' OR upper(offer_desc_v)  like '%EID%' OR upper(offer_desc_v)  like '%TEST%'
+    then 'OTHER'
+    when a.da_id in (401,53,1004,1018,59,98,1052) THEN 'PEAK'
+    WHEN upper(service_type) like '%OFF-PEAK%' or upper(ENLIGH_NAME) like '%OFF-PEAK%' THEN 'OFF-PEAK' 
+     when a.da_id in(21,11,12,52) then 'BUYABLE' 
+    else 'Unknown'
+    end as Bolton_Type ,
+    case when VALIDITY_V in('1:00:00','0:00:05') and OFFER_DESC_V not like '%HOUR%'  or OFFER_DESC_V like '%TODAY%' then 'DAYLY'
+    when  upper(OFFER_DESC_V) like '%1G HOUR%' or  UPPER(OFFER_DESC_V) like '%1 HOUR%' or  UPPER(OFFER_DESC_V) like '%1GHOURLY%' or  UPPER(OFFER_DESC_V) like '%1HOUR%' or  UPPER(OFFER_DESC_V) like'%1 GHOURLY%' or UPPER(OFFER_DESC_V) like '%1G HOURL%' or   validity_v in('00:1:00','00:00:1','00:00:01') then 'HOURLY'
+    when UPPER(OFFER_DESC_V) like '%2HOUR%' then '2 HOUR'
+    when UPPER(OFFER_DESC_V) like '%3HOUR%' then '3 HOUR'
+    when VALIDITY_V in('3:00:00') then '3 DAYS'
+    when VALIDITY_V in('7:0:0','7:00:00') then 'WEEKLY'
+    when VALIDITY_V in('15:00:00') then '15 DAYS'
+    when VALIDITY_V in('30:0:0','31:00:00','30:00:00') then 'MONTHLY' 
+    when VALIDITY_V in('60:0:0','60:00:00','62:00:00') then 'LONG-TERM 2'
+    when VALIDITY_V in('90:00:00','93:00:00','93:0:0') then 'LONG-TERM 3'
+    when VALIDITY_V in('186:00:00','180:00:00','183:00:00') then 'LONG-TERM 6'
+    when VALIDITY_V in('365:00:00','366:00:00','366:0:0','372:00:00','365:0:0','367:0:0','367:00:00') then 'LONG-TERM 12'
+    end as OFFER_VALIDITY_DESCRIPTION
+    from mahsa_e.usage_per_offer a left join  
+    (
+    select z.*,row_number() over(partition by CS5_OFFER_ID_V order by OFFER_ST_DATE_D desc) offer_row
+    from STG_GEN.ABLM_CB_OFFERS@ADHOC1PTOods1p z
+    )b  on a.offer_id=b.CS5_OFFER_ID_V
+    left join mahsa_e.da_sequence d on d.da_id=a.da_id
+    where d.da_id not in (198,1013,94,1051,77,1023,405,99,1020,1053)--tiered excluded , 77: free voucher , 1053: loyLTY FREE-- exclude 1051
+    and upper(offer_desc_v) not like '%STAFF%' and upper(offer_desc_v) not like '%SPOUSE%' and upper(offer_desc_v) not like '%CONTRACTOR%'
+    AND upper(offer_desc_v) not like '%HAJ%' AND upper(offer_desc_v) not like '%ARBAEEN%' AND upper(offer_desc_v) not like '%WORLD%' 
+    AND upper(offer_desc_v) not like '%NOWROOZ%' AND upper(offer_desc_v) not like '%NFC%' AND upper(offer_desc_v) not like '%MOBILE%'  
+    and b.offer_row=1
+    group by date_key,VALIDITY_V,OFFER_ID,a.da_id,OFFER_DESC_V,
+    case
+    when a.offer_id between 52370 and 52687 or a.offer_id between 57149 and 57315 or  offer_desc_v like '%TD%'-- TD-LTE
+    or a.da_id in (67,1006,58,1007,1203) --LTE and Roaming , PCRF , MVNO
+    or a.offer_id between 33010 and 33017 or a.offer_id between 35010 and 35017 --4khoone offers
+    or a.offer_id between 87064 and 87088 -- snapi offers
+    OR UPPER(offer_desc_v) like '%CORPORATE%'
+    OR upper(offer_desc_v)  like '%ENTERPRISE%' OR upper(offer_desc_v)  like '%IMAMREZA%' OR upper(offer_desc_v)  like '%WOW%' OR upper(offer_desc_v)  like '%EID%' OR upper(offer_desc_v)  like '%TEST%'
+    then 'OTHER' 
+    when a.da_id in (401,53,1004,1018,59,98,1052) THEN 'PEAK'
+    WHEN upper(service_type) like '%OFF-PEAK%' or upper(ENLIGH_NAME) like '%OFF-PEAK%' THEN 'OFF-PEAK' 
+    when a.da_id in(21,11,12,52) then 'BUYABLE' 
+    else 'Unknown'
+    end  , 
+    case when VALIDITY_V in('1:00:00','0:00:05') and OFFER_DESC_V not like '%HOUR%'  or OFFER_DESC_V like '%TODAY%' then 'DAYLY'
+    when  upper(OFFER_DESC_V) like '%1G HOUR%' or  UPPER(OFFER_DESC_V) like '%1 HOUR%' or  UPPER(OFFER_DESC_V) like '%1GHOURLY%' or  UPPER(OFFER_DESC_V) like '%1HOUR%' or  UPPER(OFFER_DESC_V) like'%1 GHOURLY%' or UPPER(OFFER_DESC_V) like '%1G HOURL%' or   validity_v in('00:1:00','00:00:1','00:00:01') then 'HOURLY'
+    when UPPER(OFFER_DESC_V) like '%2HOUR%' then '2 HOUR'
+    when UPPER(OFFER_DESC_V) like '%3HOUR%' then '3 HOUR'
+    when VALIDITY_V in('3:00:00') then '3 DAYS'
+    when VALIDITY_V in('7:0:0','7:00:00') then 'WEEKLY'
+    when VALIDITY_V in('15:00:00') then '15 DAYS'
+    when VALIDITY_V in('30:0:0','31:00:00','30:00:00') then 'MONTHLY' 
+    when VALIDITY_V in('60:0:0','60:00:00','62:00:00') then 'LONG-TERM 2'
+    when VALIDITY_V in('90:00:00','93:00:00','93:0:0') then 'LONG-TERM 3'
+    when VALIDITY_V in('186:00:00','180:00:00','183:00:00') then 'LONG-TERM 6'
+    when VALIDITY_V in('365:00:00','366:00:00','366:0:0','372:00:00','365:0:0','367:0:0','367:00:00') then 'LONG-TERM 12'
+    end 
+     
+    
+) 
+where DATA_USAGE>0 
+--and Bolton_Type='OFF-PEAK' and OFFER_VALIDITY_DESCRIPTION='DAYLY'
+--and OFFER_VALIDITY_DESCRIPTION is null and BOLTON_TYPE<>'OTHER' and VALIDITY_V is not null
+group by date_key,Bolton_Type,case when bolton_type<>'OTHER' then OFFER_VALIDITY_DESCRIPTION else '' end ;
+
